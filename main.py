@@ -1,15 +1,59 @@
 from fastapi import FastAPI, Path, HTTPException, Query
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, computed_field
+from typing import Annotated, Literal
 import json
 
 
 app = FastAPI()
 
+class Patient(BaseModel):
+    
+    id: Annotated[str, Field(..., description="Patient's ID", examples=['P001', 'P034'])]
+    
+    name: Annotated[str, Field(..., description="Patient's Name", examples=['Apurba', 'Nitish'])]
+    
+    city: Annotated[str, Field(..., description="Patient's City", examples=['Dhaka', 'Sylhet'])]
+    
+    age: Annotated[int, Field(..., gt=0, lt=120, description="Patient's Age", examples=['30', '25'])]
+    
+    gender: Annotated[Literal['male', 'female', 'others'], Field(..., description="Patient's Gender")]
+    
+    height: Annotated[float, Field(..., gt=0, description="Patient's Height in Meter", examples=['1.7','2.5'])]
+    
+    weight: Annotated[float, Field(..., gt=0, description="Patient's Weight in KG", examples=['78','68'])]
+    
+    
+    @computed_field
+    @property
+    def bmi(self) -> float:
+        bmi = round(self.weight/(self.height**2), 2)
+        return bmi
+    
+    
+    @computed_field
+    @property
+    def verdict(self) -> str:
+        if self.bmi < 18.5:
+            return 'Underweight'
+        elif self.bmi < 25:
+            return 'Normal'
+        elif self.bmi < 30:
+            return 'Overweight'
+        else:
+            return 'Obese'
+
 
 def load_data():
     with open('patients.json', 'r') as f:
         data = json.load(f)
-    
     return data
+
+
+def save_data(data):
+    with open('patients.json', 'w') as f:
+        json.dump(data, f)
+
 
 
 @app.get("/")
@@ -29,7 +73,7 @@ def view():
 
 
 @app.get("/patient/{patient_id}")
-def view_patient(patient_id: str = Path(..., description='ID of the Patient in thr DB', example='P001')):
+def view_patient(patient_id: str = Path(..., description='ID of the Patient in the DB', example='P001')):
     data = load_data()
     
     if patient_id in data:
@@ -62,3 +106,40 @@ def sort_patients(
 
     return sorted_data
 
+
+@app.post("/create")
+def create_patient(patient: Patient):
+    
+    # Load Existing Data
+    data = load_data()
+    
+    # Check if the patient already exists
+    if patient.id in data:
+        raise HTTPException(status_code=400, detail=f'Patient ID already exist. {patient.id}')
+    
+    # Add new patient to the database
+    data[patient.id] = patient.model_dump(exclude=['id'])
+    
+    # Save into the JSON File
+    save_data(data)
+    
+    # Sending JSON Response
+    return JSONResponse(status_code=201, content={'message':'patient created successfully'})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# myenv\Scripts\activate
+# python -m uvicorn main:app --reload
